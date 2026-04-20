@@ -56,7 +56,7 @@ export default function LoginPage() {
               <option value="" disabled>-- Seçiniz --</option>
               {USERS.map(user => (
                 <option key={user.id} value={user.id}>
-                  {user.name} {user.role === 'admin' ? '👑' : '👤'}
+                  {user.emoji} {user.name}
                 </option>
               ))}
             </select>

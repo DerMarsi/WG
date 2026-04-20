@@ -15,7 +15,7 @@ export default function Home() {
       <header className="flex-center mb-4" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="heading-1" style={{ marginBottom: 0 }}>WG Kasa</h1>
-          <p className="text-muted">Hoş geldin, {user.name} {isAdmin ? '👑' : '👤'}</p>
+          <p className="text-muted">Hoş geldin, {user.emoji} {user.name}</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <Link href="/upload" className="btn-primary">

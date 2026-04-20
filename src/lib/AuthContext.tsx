@@ -9,14 +9,15 @@ export interface User {
   id: string;
   name: string;
   role: Role;
+  emoji: string;
 }
 
 export const USERS: User[] = [
-  { id: "1", name: "Ebubekir Abi", role: "admin" },
-  { id: "2", name: "Yusuf Abi", role: "admin" },
-  { id: "3", name: "Emre Abi", role: "member" },
-  { id: "4", name: "Adil Abi", role: "member" },
-  { id: "5", name: "Erkam Abi", role: "member" },
+  { id: "1", name: "Ebubekir Abi", role: "admin", emoji: "🔑" },
+  { id: "2", name: "Yusuf Abi", role: "admin", emoji: "🧮" },
+  { id: "3", name: "Emre Abi", role: "member", emoji: "🛒" },
+  { id: "4", name: "Adil Abi", role: "member", emoji: "🍕" },
+  { id: "5", name: "Erkam Abi", role: "member", emoji: "🚀" },
 ];
 
 interface AuthContextType {
