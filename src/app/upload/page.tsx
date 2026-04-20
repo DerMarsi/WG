@@ -2,10 +2,16 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { parseReceiptImage } from '@/actions/parseReceipt';
+import { saveReceiptToDb } from '@/actions/saveReceipt';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function UploadPage() {
+  const { user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -14,11 +20,9 @@ export default function UploadPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Convert file to base64
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64String = event.target?.result as string;
-      // Extract just the base64 data part
       const base64Data = base64String.split(',')[1];
       
       setLoading(true);
@@ -39,6 +43,26 @@ export default function UploadPage() {
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleSave = async () => {
+    if (!result || !user) return;
+    
+    setSaving(true);
+    setError('');
+
+    try {
+      const response = await saveReceiptToDb(result, user.id);
+      if (response.success) {
+        router.push('/');
+      } else {
+        setError(response.error || "Kaydedilemedi.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Kaydetme sırasında hata oluştu.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -110,9 +134,22 @@ export default function UploadPage() {
               <span className="text-accent" style={{ fontSize: '2rem', fontWeight: 700 }}>{result.totalAmount} €</span>
             </div>
 
+            {error && (
+              <div style={{ marginTop: '1rem', color: 'var(--danger)', fontSize: '0.9rem' }}>
+                {error}
+              </div>
+            )}
+
             <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-              <button className="btn-primary" style={{ flex: 1, padding: '1rem' }}>Tabloya Kaydet (Onayla)</button>
-              <button onClick={() => setResult(null)} className="btn-secondary">İptal</button>
+              <button 
+                onClick={handleSave} 
+                className="btn-primary" 
+                style={{ flex: 1, padding: '1rem' }}
+                disabled={saving}
+              >
+                {saving ? 'Kaydediliyor...' : 'Tabloya Kaydet (Onayla)'}
+              </button>
+              <button onClick={() => setResult(null)} className="btn-secondary" disabled={saving}>İptal</button>
             </div>
           </div>
         ) : (
