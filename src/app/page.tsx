@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabaseClient';
 export default function Home() {
   const { user, logout } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
   const [data, setData] = useState<any>({
     totalHouseExpense: 0,
     perPersonShare: 0,
@@ -21,42 +23,54 @@ export default function Home() {
 
     const fetchData = async () => {
       setLoading(true);
+      setFetchError(null);
       try {
         // 1. Fetch all receipts and items
         const { data: receipts, error: rError } = await supabase
           .from('receipts')
           .select('*, receipt_items(*)');
 
-        if (rError) throw rError;
+        if (rError) {
+          setFetchError(rError.message);
+          throw rError;
+        }
+
+        setDebugInfo(`Bulunan Fiş Sayısı: ${receipts?.length || 0}`);
+
+        if (!receipts || receipts.length === 0) {
+          setLoading(false);
+          return;
+        }
 
         // 2. Calculate Shared Expenses
         let totalShared = 0;
         const userPaidMap: Record<string, number> = {};
         
-        // Initialize user paid map
         USERS.forEach(u => userPaidMap[u.id] = 0);
 
         receipts.forEach(receipt => {
           const buyerId = receipt.uploaded_by;
-          receipt.receipt_items.forEach((item: any) => {
-            if (item.is_shared) {
-              totalShared += Number(item.price);
-              userPaidMap[buyerId] += Number(item.price);
-            }
-          });
+          if (receipt.receipt_items) {
+            receipt.receipt_items.forEach((item: any) => {
+              if (item.is_shared) {
+                totalShared += Number(item.price);
+                if (userPaidMap[buyerId] !== undefined) {
+                  userPaidMap[buyerId] += Number(item.price);
+                }
+              }
+            });
+          }
         });
 
         const perPersonShare = totalShared / USERS.length;
         const userBalance = userPaidMap[user.id] - perPersonShare;
 
-        // 3. Calculate all user balances (debts)
         const debts = USERS.map(u => ({
           name: u.name,
           balance: userPaidMap[u.id] - perPersonShare,
           emoji: u.emoji
         })).sort((a, b) => a.balance - b.balance);
 
-        // 4. Format recent transactions
         const recent = receipts
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
           .slice(0, 5)
@@ -74,8 +88,9 @@ export default function Home() {
           debts,
           recentTransactions: recent
         });
-      } catch (err) {
+      } catch (err: any) {
         console.error("Dashboard Fetch Error:", err);
+        setFetchError(err.message || "Veriler çekilemedi.");
       } finally {
         setLoading(false);
       }
@@ -85,8 +100,7 @@ export default function Home() {
   }, [user]);
 
   if (!user) return null;
-  if (loading) return <div className="container flex-center" style={{ height: '80vh' }}><div className="loading-spinner"></div></div>;
-
+  
   const isAdmin = user.role === 'admin';
 
   return (
@@ -95,6 +109,7 @@ export default function Home() {
         <div>
           <h1 className="heading-1" style={{ marginBottom: 0 }}>WG Kasa</h1>
           <p className="text-muted">Hoş geldin, {user.emoji} {user.name}</p>
+          {debugInfo && <p style={{ fontSize: '0.7rem', color: 'gray' }}>{debugInfo}</p>}
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <Link href="/upload" className="btn-primary">
@@ -106,7 +121,18 @@ export default function Home() {
         </div>
       </header>
 
-      {isAdmin ? (
+      {fetchError && (
+        <div className="glass-panel" style={{ border: '1px solid var(--danger)', color: 'var(--danger)', marginBottom: '1rem' }}>
+          Hata: {fetchError} <br/>
+          <small>İpucu: Supabase'de RLS'yi kapattığınızdan ve tabloları oluşturduğunuzdan emin olun.</small>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex-center" style={{ height: '50vh' }}>
+          <div className="loading-spinner"></div>
+        </div>
+      ) : isAdmin ? (
         <div className="grid-cols-2 mt-4">
           <div className="glass-panel">
             <h2 className="heading-2">Evin Durum Özeti (Yönetici)</h2>
@@ -147,7 +173,7 @@ export default function Home() {
                       <div style={{ fontWeight: 600 }}>{tx.store}</div>
                       <div className="text-muted">{tx.date} • {tx.buyer} ödedi</div>
                     </div>
-                    <div style={{ fontWeight: 700 }}>{tx.amount.toFixed(2)} €</div>
+                    <div style={{ fontWeight: 700 }}>{Number(tx.amount).toFixed(2)} €</div>
                   </div>
                 ))
               ) : (
