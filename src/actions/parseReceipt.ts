@@ -1,72 +1,66 @@
 "use server";
 
-import { GoogleGenAI, Type, Schema } from '@google/genai';
+import Groq from "groq-sdk";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-const receiptSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    date: { type: Type.STRING, description: "Tarih (GG.AA.YYYY)" },
-    store: { type: Type.STRING, description: "Market Adı" },
-    totalAmount: { type: Type.NUMBER, description: "Fişin Toplam Tutarı (€)" },
-    items: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING, description: "Ürün Adı" },
-          category: {
-            type: Type.STRING,
-            description: "Şu listeden biri olmalı: Sebze & Meyve, Et & Tavuk, Kahvaltılık, Süt Ürünleri, Temel Gıda, Atıştırmalık, İçecekler, Temizlik, Kişisel Bakım, Depozito İadesi, Diğer"
-          },
-          price: { type: Type.NUMBER, description: "Ürün Fiyatı (€)" },
-          isShared: { type: Type.BOOLEAN, description: "Ürün herkes için ortaksa true, tek kişiye ait olma ihtimali yüksekse false" }
-        },
-        required: ["name", "category", "price", "isShared"]
-      }
+const systemPrompt = `Sen bir uzman veri analistisin. Sana verilen Almanya market fişinin fotoğrafını analiz et ve çıkarımlarını tam olarak aşağıdaki JSON formatında döndür. Çıktıda SADECE JSON olmalıdır, hiçbir ekstra açıklama veya metin YAZMA.
+
+JSON Formatı:
+{
+  "date": "Fiş Tarihi (GG.AA.YYYY)",
+  "store": "Market Adı",
+  "totalAmount": 12.50,
+  "items": [
+    {
+      "name": "Ürün Adı",
+      "category": "Kategori",
+      "price": 2.50,
+      "isShared": true
     }
-  },
-  required: ["date", "store", "totalAmount", "items"]
-};
+  ]
+}
+
+Kurallar:
+1. "category" alanı SADECE şu kelimelerden biri olabilir: "Sebze & Meyve", "Et & Tavuk", "Kahvaltılık", "Süt Ürünleri", "Temel Gıda", "Atıştırmalık", "İçecekler", "Temizlik", "Kişisel Bakım", "Depozito İadesi", "Diğer".
+2. "price" alanı mutlaka bir sayı olmalıdır (nokta ile ayrılmış).
+3. "isShared" alanı, eğer ürün açıkça bir kişinin kişisel zevkiyse (örn. protein tozu, tekil bir çikolata) false, aksi halde evin genel ihtiyacıysa true olmalıdır.
+4. "Pfand" veya "Leergut" yazan kısımları "Depozito İadesi" kategorisinde eksi (-) değerli price ile ekle.
+`;
 
 export async function parseReceiptImage(base64Image: string, mimeType: string) {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: [
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
         {
-          role: 'user',
-          parts: [
-            {
-              inlineData: {
-                data: base64Image,
-                mimeType: mimeType
-              }
-            },
-            {
-              text: "Lütfen bu Almanya market fişini oku. Tüm ürünleri, fiyatlarını ve market/tarih bilgilerini çıkart. Kategorileri verdiğim listeden mantıklı şekilde seç. Pfand veya Leergut varsa Depozito İadesi kategorisine eksi fiyatla ekle."
+          role: "user",
+          content: [
+            { type: "text", text: systemPrompt },
+            { 
+              type: "image_url", 
+              image_url: { url: `data:${mimeType};base64,${base64Image}` } 
             }
           ]
         }
       ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: receiptSchema,
-        temperature: 0.1,
-      }
+      model: "llama-3.2-90b-vision-preview",
+      temperature: 0.1,
     });
 
-    if (response.text) {
-      return { success: true, data: JSON.parse(response.text) };
+    const responseText = chatCompletion.choices[0]?.message?.content || "";
+    
+    // Extract JSON block if surrounded by markdown formatting
+    let rawJson = responseText;
+    if (responseText.includes("```json")) {
+      rawJson = responseText.split("```json")[1].split("```")[0];
+    } else if (responseText.includes("```")) {
+      rawJson = responseText.split("```")[1].split("```")[0];
     }
-    return { success: false, error: "Metin dönmedi." };
+    
+    const data = JSON.parse(rawJson.trim());
+    return { success: true, data };
   } catch (error: any) {
-    console.error("Gemini API Hatası:", error);
-    let errorMsg = error.message || "Bilinmeyen bir hata oluştu.";
-    if (errorMsg.includes("503") || errorMsg.includes("high demand")) {
-      errorMsg = "Şu anda Google Gemini sunucularında yoğunluk var (503). Lütfen 1-2 dakika bekleyip tekrar deneyin.";
-    }
-    return { success: false, error: errorMsg };
+    console.error("Groq API Hatası:", error);
+    return { success: false, error: error.message || "Bilinmeyen bir hata oluştu." };
   }
 }
