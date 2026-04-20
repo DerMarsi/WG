@@ -32,7 +32,7 @@ export async function parseReceiptImage(base64Image: string, mimeType: string) {
   try {
     // 1. Adım: Ücretsiz OCR.space API ile resmi metne çevir
     const formData = new FormData();
-    formData.append('base64image', \`data:\${mimeType};base64,\${base64Image}\`);
+    formData.append('base64image', `data:${mimeType};base64,${base64Image}`);
     formData.append('language', 'ger');
     formData.append('isTable', 'true');
     formData.append('scale', 'true');
@@ -71,10 +71,10 @@ export async function parseReceiptImage(base64Image: string, mimeType: string) {
     
     // Extract JSON block if surrounded by markdown formatting
     let rawJson = responseText;
-    if (responseText.includes("\`\`\`json")) {
-      rawJson = responseText.split("\`\`\`json")[1].split("\`\`\`")[0];
-    } else if (responseText.includes("\`\`\`")) {
-      rawJson = responseText.split("\`\`\`")[1].split("\`\`\`")[0];
+    if (responseText.includes("```json")) {
+      rawJson = responseText.split("```json")[1].split("```")[0];
+    } else if (responseText.includes("```")) {
+      rawJson = responseText.split("```")[1].split("```")[0];
     }
     
     const data = JSON.parse(rawJson.trim());
